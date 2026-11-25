@@ -1,0 +1,5 @@
+package com.jasrtv.data.remote
+
+enum class ConnectionState {
+    DISCONNECTED, CONNECTING, WAITING_FOR_TV, CONNECTED, DENIED, TIMED_OUT, CERTIFICATE_CHANGED, UNREACHABLE
+}
