@@ -1,10 +1,8 @@
 package com.jasrtv.ui.remote
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,11 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -41,6 +37,7 @@ import com.jasrtv.data.discovery.TvDevice
 import com.jasrtv.data.remote.ConnectionState
 import com.jasrtv.data.remote.RemoteKey
 import com.jasrtv.data.remote.StreamingApp
+import com.jasrtv.ui.RemoteControlButton
 
 @Composable
 fun RemoteScreen(
@@ -126,16 +123,12 @@ fun RemoteScreen(
 @Composable
 private fun PowerButton(enabled: Boolean, label: String, modifier: Modifier, onClick: () -> Unit) {
     val red = if (enabled) Color(0xFFFF5D64) else Color(0xFF965A5E)
-    Button(
+    RemoteControlButton(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier.size(52.dp).semantics { contentDescription = label },
         shape = CircleShape,
-        border = BorderStroke(1.dp, Color(0xFF343434)),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFF141414), disabledContainerColor = Color(0xFF1C1C1C)
-        ),
-        contentPadding = PaddingValues(0.dp)
+        accent = red
     ) {
         Canvas(Modifier.size(24.dp)) {
             val stroke = 2.dp.toPx()
@@ -167,8 +160,11 @@ private fun DirectionPad(enabled: Boolean, onKey: (RemoteKey) -> Unit) {
         DirectionButton("↑", "Arriba", enabled) { onKey(RemoteKey.UP) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             DirectionButton("←", "Izquierda", enabled) { onKey(RemoteKey.LEFT) }
-            Button(onClick = { onKey(RemoteKey.OK) }, enabled = enabled,
-                modifier = Modifier.size(width = 80.dp, height = 58.dp)) { Text("OK") }
+            RemoteControlButton(onClick = { onKey(RemoteKey.OK) }, enabled = enabled,
+                modifier = Modifier.size(width = 80.dp, height = 58.dp),
+                shape = RoundedCornerShape(29.dp), highlighted = true) {
+                Text("OK", style = MaterialTheme.typography.titleLarge)
+            }
             DirectionButton("→", "Derecha", enabled) { onKey(RemoteKey.RIGHT) }
         }
         DirectionButton("↓", "Abajo", enabled) { onKey(RemoteKey.DOWN) }
@@ -177,9 +173,9 @@ private fun DirectionPad(enabled: Boolean, onKey: (RemoteKey) -> Unit) {
 
 @Composable
 private fun DirectionButton(symbol: String, label: String, enabled: Boolean, onClick: () -> Unit) {
-    FilledTonalButton(onClick = onClick, enabled = enabled,
+    RemoteControlButton(onClick = onClick, enabled = enabled,
         modifier = Modifier.size(58.dp).semantics { contentDescription = label },
-        contentPadding = PaddingValues(0.dp)) {
+        shape = CircleShape) {
         Text(symbol, style = MaterialTheme.typography.headlineSmall)
     }
 }

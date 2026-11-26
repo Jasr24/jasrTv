@@ -37,7 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
@@ -54,12 +54,6 @@ private enum class InputMode(val label: String) {
     LIVE("En vivo"), PIN("PIN"), MANUAL("Manual")
 }
 
-private val Violet = Color(0xFF7532EC)
-private val Lavender = Color(0xFFBB8AFF)
-private val FieldBackground = Color(0xFF141326)
-private val CardInk = Color(0xFFF7F3FF)
-private val MutedInk = Color(0xFFC7BDD8)
-
 @Composable
 internal fun RemoteTextInput(onText: (String) -> Boolean, onDown: () -> Boolean) {
     var mode by remember { mutableStateOf(InputMode.MANUAL) }
@@ -71,6 +65,7 @@ internal fun RemoteTextInput(onText: (String) -> Boolean, onDown: () -> Boolean)
     val sendText by rememberUpdatedState(onText)
     val sendDown by rememberUpdatedState(onDown)
     val focus = LocalFocusManager.current
+    val colors = MaterialTheme.colorScheme
 
     if (mode == InputMode.PIN) {
         DisposableEffect(pinQueue) { onDispose { pinQueue.cancel() } }
@@ -104,14 +99,14 @@ internal fun RemoteTextInput(onText: (String) -> Boolean, onDown: () -> Boolean)
     val cardShape = RoundedCornerShape(20.dp)
     Column(
         Modifier.fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color(0xFF201A35), Color(0xFF151325))), cardShape)
-            .border(1.dp, Color(0xFF514073), cardShape)
+            .background(Brush.verticalGradient(listOf(colors.surfaceVariant, colors.background)), cardShape)
+            .border(1.5.dp, Brush.verticalGradient(listOf(colors.primary, colors.outlineVariant)), cardShape)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextPanelIcon(TextPanelGlyph.WIFI, Lavender)
-            Text("Enviar texto por Wi‑Fi", style = MaterialTheme.typography.titleMedium, color = CardInk)
+            TextPanelIcon(TextPanelGlyph.WIFI, colors.primary)
+            Text("Enviar texto por Wi‑Fi", style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (option in InputMode.entries) {
@@ -122,7 +117,7 @@ internal fun RemoteTextInput(onText: (String) -> Boolean, onDown: () -> Boolean)
             PinInput(onInput = { pinQueue.trySend(it) })
             Text(feedback ?: if (sending) "Enviando caracteres…"
                 else "Cada carácter se envía seguido de Abajo. El campo del celular queda vacío.",
-                style = MaterialTheme.typography.bodySmall, color = MutedInk)
+                style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             return@Column
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -141,18 +136,18 @@ internal fun RemoteTextInput(onText: (String) -> Boolean, onDown: () -> Boolean)
                 placeholder = { Text("Toca para escribir") },
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = CardInk, unfocusedTextColor = CardInk,
-                    focusedContainerColor = FieldBackground, unfocusedContainerColor = FieldBackground,
-                    focusedBorderColor = Lavender, unfocusedBorderColor = Color(0xFF625080),
-                    focusedPlaceholderColor = MutedInk, unfocusedPlaceholderColor = MutedInk,
-                    cursorColor = Lavender
+                    focusedTextColor = colors.onSurface, unfocusedTextColor = colors.onSurface,
+                    focusedContainerColor = colors.background, unfocusedContainerColor = colors.background,
+                    focusedBorderColor = colors.primary, unfocusedBorderColor = colors.outline,
+                    focusedPlaceholderColor = colors.onSurfaceVariant, unfocusedPlaceholderColor = colors.onSurfaceVariant,
+                    cursorColor = colors.primary
                 ),
                 trailingIcon = {
                     IconButton(onClick = { hidden = !hidden },
                         modifier = Modifier.semantics {
                             contentDescription = if (hidden) "Mostrar texto" else "Ocultar texto"
                         }) {
-                        TextPanelIcon(if (hidden) TextPanelGlyph.EYE_OFF else TextPanelGlyph.EYE, CardInk)
+                        TextPanelIcon(if (hidden) TextPanelGlyph.EYE_OFF else TextPanelGlyph.EYE, colors.onSurface)
                     }
                 },
                 singleLine = true,
@@ -178,7 +173,10 @@ internal fun RemoteTextInput(onText: (String) -> Boolean, onDown: () -> Boolean)
                     modifier = Modifier.size(48.dp).semantics {
                         contentDescription = if (manual) "Enviar texto" else "Vaciar texto"
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Violet, contentColor = CardInk),
+                    border = BorderStroke(1.dp, colors.outline),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.primaryContainer, contentColor = colors.onPrimaryContainer
+                    ),
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     TextPanelIcon(if (manual) TextPanelGlyph.SEND else TextPanelGlyph.CLEAR,
@@ -186,12 +184,13 @@ internal fun RemoteTextInput(onText: (String) -> Boolean, onDown: () -> Boolean)
                 }
             }
         }
-        feedback?.let { Text(it, color = MutedInk, style = MaterialTheme.typography.bodySmall) }
+        feedback?.let { Text(it, color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
 @Composable
 private fun TextModeButton(mode: InputMode, active: Boolean, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
     val icon = when (mode) {
         InputMode.LIVE -> TextPanelGlyph.PLAY
         InputMode.PIN -> TextPanelGlyph.LOCK
@@ -201,12 +200,12 @@ private fun TextModeButton(mode: InputMode, active: Boolean, enabled: Boolean, m
         onClick = onClick, enabled = enabled,
         modifier = modifier.heightIn(min = 48.dp).semantics { selected = active },
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, if (active) Color(0xFF9C68FF) else Color(0xFF423653)),
+        border = BorderStroke(1.dp, if (active) colors.primary else colors.outline),
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (active) Violet else Color(0xFF272338),
-            contentColor = CardInk,
-            disabledContainerColor = if (active) Color(0xFF49278B) else Color(0xFF201D31),
-            disabledContentColor = MutedInk
+            containerColor = if (active) colors.primaryContainer else colors.surface,
+            contentColor = colors.onSurface,
+            disabledContainerColor = if (active) lerp(colors.surface, colors.primaryContainer, 0.55f) else colors.surface,
+            disabledContentColor = colors.onSurfaceVariant
         ),
         contentPadding = PaddingValues(horizontal = 3.dp)
     ) {
@@ -219,13 +218,14 @@ private fun TextModeButton(mode: InputMode, active: Boolean, enabled: Boolean, m
 
 @Composable
 private fun PinInput(onInput: (String) -> Unit) {
+    val colors = MaterialTheme.colorScheme
     val state = rememberTextFieldState()
     BasicTextField(
         state = state,
         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Escribir PIN" },
         lineLimits = TextFieldLineLimits.SingleLine,
-        textStyle = MaterialTheme.typography.bodyLarge.copy(color = CardInk),
-        cursorBrush = SolidColor(Lavender),
+        textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.onSurface),
+        cursorBrush = SolidColor(colors.primary),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
         inputTransformation = InputTransformation {
             val input = asCharSequence().toString()
@@ -234,9 +234,9 @@ private fun PinInput(onInput: (String) -> Unit) {
         },
         decorator = { innerTextField ->
             val shape = RoundedCornerShape(12.dp)
-            Box(Modifier.fillMaxWidth().background(FieldBackground, shape).border(1.dp, Lavender, shape)
+            Box(Modifier.fillMaxWidth().background(colors.background, shape).border(1.dp, colors.primary, shape)
                 .padding(16.dp)) {
-                Text("Toca para escribir", color = MutedInk)
+                Text("Toca para escribir", color = colors.onSurfaceVariant)
                 innerTextField()
             }
         }

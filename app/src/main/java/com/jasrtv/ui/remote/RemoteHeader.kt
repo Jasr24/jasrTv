@@ -1,6 +1,7 @@
 package com.jasrtv.ui.remote
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,18 +25,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jasrtv.data.discovery.TvDevice
 import com.jasrtv.data.remote.ConnectionState
+import com.jasrtv.ui.AppBrand
 
 @Composable
 internal fun RemoteHeader(
     device: TvDevice,
     connection: ConnectionState,
     onReconnect: () -> Unit,
-    onPairAgain: () -> Unit
+    onPairAgain: () -> Unit,
+    onChooseTheme: () -> Unit
 ) {
     val connecting = connection == ConnectionState.CONNECTING || connection == ConnectionState.WAITING_FOR_TV
     val connected = connection == ConnectionState.CONNECTED
@@ -54,37 +57,41 @@ internal fun RemoteHeader(
         ConnectionState.DISCONNECTED -> "TV desconectado. Reconectar"
     }
     Surface(color = MaterialTheme.colorScheme.surface) {
-        Row(
-            Modifier.fillMaxWidth().statusBarsPadding().heightIn(min = 56.dp).padding(start = 16.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("jasrTv", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            VerticalDivider(Modifier.height(24.dp))
-            Column(Modifier.weight(1f)) {
-                Text(device.name.removePrefix("[TV]").trimStart().ifBlank { "Samsung TV" },
-                    style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(device.address, style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            }
-            if (connected || connecting) {
-                Box(Modifier.size(48.dp).semantics { contentDescription = description },
-                    contentAlignment = Alignment.Center) {
-                    StatusDot(color)
+        Column {
+            Row(
+                Modifier.fillMaxWidth().statusBarsPadding().heightIn(min = 56.dp).padding(start = 16.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AppBrand(onChooseTheme)
+                VerticalDivider(Modifier.height(24.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(device.name.removePrefix("[TV]").trimStart().ifBlank { "Samsung TV" },
+                        style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(device.address, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
-            } else {
-                IconButton(
-                    onClick = if (connection == ConnectionState.CERTIFICATE_CHANGED) onPairAgain else onReconnect,
-                    modifier = Modifier.semantics { contentDescription = description }
-                ) { StatusDot(color) }
+                if (connected || connecting) {
+                    Box(Modifier.size(48.dp).semantics { contentDescription = description },
+                        contentAlignment = Alignment.Center) {
+                        StatusDot(color)
+                    }
+                } else {
+                    IconButton(
+                        onClick = if (connection == ConnectionState.CERTIFICATE_CHANGED) onPairAgain else onReconnect,
+                        modifier = Modifier.semantics { contentDescription = description }
+                    ) { StatusDot(color) }
+                }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         }
     }
 }
 
 @Composable
 private fun StatusDot(color: Color) {
-    Box(Modifier.size(24.dp).background(color.copy(alpha = 0.16f), CircleShape),
+    Box(Modifier.size(24.dp).background(color.copy(alpha = 0.16f), CircleShape)
+        .border(1.dp, color, CircleShape),
         contentAlignment = Alignment.Center) {
         Box(Modifier.size(12.dp).background(color, CircleShape))
     }

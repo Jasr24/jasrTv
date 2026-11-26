@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,6 +35,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jasrtv.data.remote.RemoteKey
+import com.jasrtv.ui.RemoteControlButton
 
 private enum class FunctionIcon { BACK, HOME, MICROPHONE, MUTE, VOLUME, CHANNEL }
 
@@ -74,13 +74,16 @@ private fun VerticalControl(
     onKey: (RemoteKey) -> Unit
 ) {
     val shape = RoundedCornerShape(28.dp)
-    val ink = Color(0xFFF5F1FF).copy(alpha = if (enabled) 1f else 0.45f)
+    val colors = MaterialTheme.colorScheme
+    val ink = colors.onSurface.copy(alpha = if (enabled) 1f else 0.45f)
     Column(horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Column(
             Modifier.width(64.dp)
-                .background(Brush.verticalGradient(listOf(Color(0xFF2A2347), Color(0xFF191725))), shape)
-                .border(1.dp, Color(0xFF514376), shape),
+                .background(Brush.verticalGradient(listOf(colors.surfaceVariant, colors.background)), shape)
+                .border(1.5.dp, Brush.verticalGradient(
+                    listOf(colors.primary, colors.outlineVariant, colors.primary)
+                ), shape),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             VerticalControlKey("+", "Subir ${label.lowercase()}", enabled, ink) { onKey(up) }
@@ -112,14 +115,9 @@ private fun IconButton(
     active: Boolean = false,
     onClick: () -> Unit
 ) {
-    val colors = if (active) ButtonDefaults.filledTonalButtonColors(
-        containerColor = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary
-    ) else ButtonDefaults.filledTonalButtonColors()
-    FilledTonalButton(
-        onClick = onClick, enabled = enabled, shape = CircleShape, colors = colors,
-        modifier = modifier.size(52.dp).semantics { contentDescription = label },
-        contentPadding = PaddingValues(0.dp)
+    RemoteControlButton(
+        onClick = onClick, enabled = enabled, shape = CircleShape, highlighted = active,
+        modifier = modifier.size(52.dp).semantics { contentDescription = label }
     ) {
         RemoteIcon(icon, LocalContentColor.current)
     }
