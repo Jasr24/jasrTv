@@ -61,11 +61,17 @@ fun RemoteScreen(
             }
         }
         DirectionPad(connected) { onKey(it) }
-        FilledTonalButton(
-            onClick = { onKey(RemoteKey.BACK) },
-            enabled = connected,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) { Text("Atrás") }
+        Row(
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilledTonalButton(onClick = { onKey(RemoteKey.BACK) }, enabled = connected) {
+                Text("Atrás")
+            }
+            FilledTonalButton(onClick = { onKey(RemoteKey.HOME) }, enabled = connected) {
+                Text("Home")
+            }
+        }
         if (connected) RemoteTextInput(onText, onDown = { onKey(RemoteKey.DOWN) })
     }
 }
