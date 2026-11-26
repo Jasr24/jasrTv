@@ -17,6 +17,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jasrtv.ui.devices.DevicesScreen
@@ -47,8 +49,13 @@ class MainActivity : ComponentActivity() {
                             DevicesScreen(state, devices::search, remote::select, devices::deviceByAddress)
                         } else {
                             val connection by remote.connection.collectAsStateWithLifecycle()
+                            val voiceActive by remote.voiceActive.collectAsStateWithLifecycle()
+                            val powerMessage by remote.powerMessage.collectAsStateWithLifecycle()
+                            LifecycleEventEffect(Lifecycle.Event.ON_STOP) { remote.stopVoice() }
                             RemoteScreen(visibleDevice, connection, remote::changeTv, remote::reconnect,
-                                remote::pairAgain, remote::sendKey, remote::sendText)
+                                remote::pairAgain, remote::sendKey, remote::sendText,
+                                voiceActive, remote::toggleVoice,
+                                powerMessage, remote::powerOff, remote::wakeTv)
                         }
                     }
                 }

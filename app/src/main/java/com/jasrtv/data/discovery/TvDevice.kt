@@ -2,7 +2,13 @@ package com.jasrtv.data.discovery
 
 import java.net.InetAddress
 
-data class TvDevice(val id: String, val address: String, val name: String, val model: String = "")
+data class TvDevice(
+    val id: String,
+    val address: String,
+    val name: String,
+    val model: String = "",
+    val mac: String? = null
+)
 
 internal fun isLocalIpv4(address: String): Boolean {
     val parts = address.split('.')

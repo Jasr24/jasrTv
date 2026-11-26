@@ -1,6 +1,9 @@
 package com.jasrtv.ui.remote
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,17 +13,29 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -36,10 +51,16 @@ fun RemoteScreen(
     onReconnect: () -> Unit,
     onPairAgain: () -> Unit,
     onKey: (RemoteKey) -> Boolean,
-    onText: (String) -> Boolean
+    onText: (String) -> Boolean,
+    voiceActive: Boolean,
+    onVoice: () -> Unit,
+    powerMessage: String?,
+    onPowerOff: () -> Unit,
+    onWake: (String?) -> Boolean
 ) {
     val connected = connection == ConnectionState.CONNECTED
     val loading = connection in setOf(ConnectionState.CONNECTING, ConnectionState.WAITING_FOR_TV)
+    var showMac by remember(device.id) { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -60,19 +81,87 @@ fun RemoteScreen(
                 }
             }
         }
-        DirectionPad(connected) { onKey(it) }
-        Row(
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilledTonalButton(onClick = { onKey(RemoteKey.BACK) }, enabled = connected) {
-                Text("Atrás")
-            }
-            FilledTonalButton(onClick = { onKey(RemoteKey.HOME) }, enabled = connected) {
-                Text("Home")
-            }
+        Box(Modifier.fillMaxWidth()) {
+            DirectionPad(connected) { onKey(it) }
+            PowerButton(
+                enabled = !loading,
+                label = if (connected) "Apagar TV" else "Encender TV",
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp),
+                onClick = {
+                    if (connected) onPowerOff() else if (!onWake(null)) showMac = true
+                }
+            )
         }
+        RemoteFunctionButtons(connected, voiceActive, onVoice) { onKey(it) }
+        powerMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        if (voiceActive) Text("Si se abre Bixby, habla hacia el micrófono del TV.",
+            style = MaterialTheme.typography.bodySmall)
         if (connected) RemoteTextInput(onText, onDown = { onKey(RemoteKey.DOWN) })
+    }
+    if (showMac) {
+        var mac by remember { mutableStateOf("") }
+        var invalid by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { showMac = false },
+            title = { Text("Dirección MAC del TV") },
+            text = {
+                OutlinedTextField(
+                    value = mac,
+                    onValueChange = {
+                        mac = it
+                        invalid = false
+                    },
+                    label = { Text("MAC del adaptador de red del TV") },
+                    placeholder = { Text("A0:B1:C2:D3:E4:F5") },
+                    singleLine = true,
+                    isError = invalid,
+                    supportingText = { if (invalid) Text("Escribe una dirección MAC válida.") }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (onWake(mac)) showMac = false else invalid = true
+                }) { Text("Guardar y encender") }
+            },
+            dismissButton = { TextButton(onClick = { showMac = false }) { Text("Cancelar") } }
+        )
+    }
+}
+
+@Composable
+private fun PowerButton(enabled: Boolean, label: String, modifier: Modifier, onClick: () -> Unit) {
+    val red = if (enabled) Color(0xFFFF5D64) else Color(0xFF965A5E)
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.size(52.dp).semantics { contentDescription = label },
+        shape = CircleShape,
+        border = BorderStroke(1.dp, Color(0xFF343434)),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = Color(0xFF141414), disabledContainerColor = Color(0xFF1C1C1C)
+        ),
+        contentPadding = PaddingValues(0.dp)
+    ) {
+        Canvas(Modifier.size(24.dp)) {
+            val stroke = 2.dp.toPx()
+            val diameter = size.width * 0.68f
+            drawArc(
+                color = red,
+                startAngle = -50f,
+                sweepAngle = 280f,
+                useCenter = false,
+                topLeft = Offset((size.width - diameter) / 2, size.height * 0.24f),
+                size = Size(diameter, diameter),
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawLine(
+                color = red,
+                start = Offset(center.x, size.height * 0.10f),
+                end = Offset(center.x, size.height * 0.52f),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+        }
     }
 }
 

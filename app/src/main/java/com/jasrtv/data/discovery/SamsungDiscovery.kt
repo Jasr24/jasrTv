@@ -3,6 +3,7 @@ package com.jasrtv.data.discovery
 import android.content.Context
 import android.net.wifi.WifiManager
 import android.os.SystemClock
+import com.jasrtv.data.power.WakeOnLan
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -52,6 +53,11 @@ class SamsungDiscovery(context: Context) {
                 }
             }.awaitAll().filterNotNull().toSet()
         }
+    }
+
+    suspend fun refresh(device: TvDevice): TvDevice = withContext(Dispatchers.IO) {
+        val info = readDevice(device.address, samsungService = false)
+        device.copy(mac = info?.mac ?: device.mac)
     }
 
     private suspend fun findCandidates(): Map<String, Boolean> {
@@ -119,11 +125,19 @@ class SamsungDiscovery(context: Context) {
         if (!samsungService &&
             !info?.optString("type").equals("samsung.tv", ignoreCase = true) &&
             details?.optString("type")?.contains("samsung", ignoreCase = true) != true) return null
+        val mac = WakeOnLan.normalizeMac(details?.optString("networkMac"))
+            ?: WakeOnLan.normalizeMac(details?.optString("mac"))
+            ?: if (details?.optString("networkType").equals("wired", ignoreCase = true)) {
+                WakeOnLan.normalizeMac(details?.optString("ethernetMac"))
+            } else {
+                WakeOnLan.normalizeMac(details?.optString("wifiMac"))
+            }
         return TvDevice(
             id = details?.optString("id").orEmpty().ifBlank { address },
             address = address,
             name = details?.optString("name").orEmpty().ifBlank { "Samsung TV" },
-            model = details?.optString("modelName").orEmpty()
+            model = details?.optString("modelName").orEmpty(),
+            mac = mac
         )
     }
 }

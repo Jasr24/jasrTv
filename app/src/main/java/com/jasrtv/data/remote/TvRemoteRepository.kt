@@ -64,6 +64,9 @@ class TvRemoteRepository(context: Context) {
 
     fun sendKey(key: RemoteKey): Boolean = send { client.sendKey(it, key) }
 
+    fun setVoiceKey(pressed: Boolean): Boolean =
+        send { client.sendKey(it, RemoteKey.VOICE, if (pressed) "Press" else "Release") }
+
     fun sendText(text: String): Boolean = send { client.sendText(it, text) }
 
     private fun send(action: (WebSocket) -> Boolean): Boolean {

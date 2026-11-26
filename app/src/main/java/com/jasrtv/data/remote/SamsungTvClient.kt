@@ -72,9 +72,9 @@ internal class SamsungTvClient {
         })
     }
 
-    fun sendKey(socket: WebSocket, key: RemoteKey): Boolean =
+    fun sendKey(socket: WebSocket, key: RemoteKey, action: String = "Click"): Boolean =
         send(socket, "ms.remote.control", JSONObject()
-            .put("Cmd", "Click").put("DataOfCmd", key.code)
+            .put("Cmd", action).put("DataOfCmd", key.code)
             .put("Option", "false").put("TypeOfRemote", "SendRemoteKey"))
 
     fun sendText(socket: WebSocket, text: String): Boolean =
