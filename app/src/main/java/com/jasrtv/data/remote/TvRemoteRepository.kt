@@ -3,6 +3,7 @@ package com.jasrtv.data.remote
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.jasrtv.data.discovery.PairedTvStore
 import com.jasrtv.data.discovery.TvDevice
 import com.jasrtv.data.discovery.isLocalIpv4
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.WebSocket
 
 class TvRemoteRepository(context: Context) {
+    private val pairedTvs = PairedTvStore(context)
     private val prefs = context.getSharedPreferences("tv_pairings", Context.MODE_PRIVATE)
     private val client = SamsungTvClient()
     private val handler = Handler(Looper.getMainLooper())
@@ -39,6 +41,7 @@ class TvRemoteRepository(context: Context) {
                 prefs.edit().putString(pinKey, fingerprint).apply {
                     if (token != null) putString(tokenKey, token)
                 }.apply()
+                pairedTvs.remember(tv)
                 mutableState.value = ConnectionState.CONNECTED
             }
 
@@ -61,7 +64,7 @@ class TvRemoteRepository(context: Context) {
 
     fun sendKey(key: RemoteKey): Boolean = send { client.sendKey(it, key) }
 
-    fun sendText(text: String): Boolean = text.isNotEmpty() && send { client.sendText(it, text) }
+    fun sendText(text: String): Boolean = send { client.sendText(it, text) }
 
     private fun send(action: (WebSocket) -> Boolean): Boolean {
         val current = socket ?: return false

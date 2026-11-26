@@ -13,6 +13,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,6 +42,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(topBar = { TopAppBar(title = { Text("jasrTv") }) }) { padding ->
                     Box(Modifier.padding(padding)) {
                         if (visibleDevice == null) {
+                            LaunchedEffect(devices) { devices.refreshRemembered() }
                             val state by devices.state.collectAsStateWithLifecycle()
                             DevicesScreen(state, devices::search, remote::select, devices::deviceByAddress)
                         } else {

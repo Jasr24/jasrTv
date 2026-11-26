@@ -35,13 +35,28 @@ fun DevicesScreen(
     deviceByAddress: (String) -> TvDevice?
 ) {
     var showAddress by remember { mutableStateOf(false) }
+    val newDevices = state.devices.filter { found ->
+        state.remembered.none { it.id == found.id || it.address == found.address }
+    }
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Text("Televisores", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.headlineLarge)
-            Text("Elige un Samsung de tu red Wi-Fi.", Modifier.padding(top = 4.dp))
+        }
+        if (state.remembered.isNotEmpty()) {
+            item { Text("Mis televisores", style = MaterialTheme.typography.titleMedium) }
+            items(state.remembered, key = { "saved:${it.id}" }) { saved ->
+                val found = state.devices.firstOrNull { it.id == saved.id }
+                val target = found ?: saved
+                val status = when {
+                    target.address in state.reachable.orEmpty() -> "Disponible en la red"
+                    state.searching || state.reachable == null -> "Comprobando conexión…"
+                    else -> "Sin respuesta · puede estar apagado"
+                }
+                TvCard(target, onSelect, status)
+            }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -56,16 +71,14 @@ fun DevicesScreen(
             }
         } else if (state.searchFailed) {
             item { Text("Falló la búsqueda. Revisa el Wi-Fi y vuelve a intentar.") }
-        } else if (state.devices.isEmpty()) {
-            item { Text("No encontramos televisores. Enciende el Samsung y verifica que esté en la misma red.") }
+        } else if (state.devices.isEmpty() && state.remembered.isEmpty()) {
+            item { Text("No encontramos televisores. Si el Samsung está encendido, prueba Agregar por IP.") }
         }
-        items(state.devices, key = { it.id }) { device ->
-            ElevatedCard(onClick = { onSelect(device) }, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(device.name, style = MaterialTheme.typography.titleLarge)
-                    Text(listOf(device.model, device.address).filter(String::isNotBlank).joinToString(" · "))
-                }
-            }
+        if (newDevices.isNotEmpty() && state.remembered.isNotEmpty()) {
+            item { Text("Otros televisores", style = MaterialTheme.typography.titleMedium) }
+        }
+        items(newDevices, key = { "found:${it.id}" }) { device ->
+            TvCard(device, onSelect)
         }
     }
     if (showAddress) {
@@ -102,5 +115,16 @@ fun DevicesScreen(
             },
             dismissButton = { TextButton(onClick = { showAddress = false }) { Text("Cancelar") } }
         )
+    }
+}
+
+@Composable
+private fun TvCard(device: TvDevice, onSelect: (TvDevice) -> Unit, status: String? = null) {
+    ElevatedCard(onClick = { onSelect(device) }, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(device.name, style = MaterialTheme.typography.titleLarge)
+            Text(listOf(device.model, device.address).filter(String::isNotBlank).joinToString(" · "))
+            if (status != null) Text(status, color = MaterialTheme.colorScheme.primary)
+        }
     }
 }

@@ -4,35 +4,25 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.jasrtv.data.discovery.TvDevice
 import com.jasrtv.data.remote.ConnectionState
@@ -45,7 +35,7 @@ fun RemoteScreen(
     onChangeTv: () -> Unit,
     onReconnect: () -> Unit,
     onPairAgain: () -> Unit,
-    onKey: (RemoteKey) -> Unit,
+    onKey: (RemoteKey) -> Boolean,
     onText: (String) -> Boolean
 ) {
     val connected = connection == ConnectionState.CONNECTED
@@ -70,13 +60,13 @@ fun RemoteScreen(
                 }
             }
         }
-        DirectionPad(connected, onKey)
+        DirectionPad(connected) { onKey(it) }
         FilledTonalButton(
             onClick = { onKey(RemoteKey.BACK) },
             enabled = connected,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         ) { Text("Atrás") }
-        if (connected) RemoteTextInput(onText)
+        if (connected) RemoteTextInput(onText, onDown = { onKey(RemoteKey.DOWN) })
     }
 }
 
@@ -101,46 +91,6 @@ private fun DirectionButton(symbol: String, label: String, enabled: Boolean, onC
         modifier = Modifier.size(58.dp).semantics { contentDescription = label },
         contentPadding = PaddingValues(0.dp)) {
         Text(symbol, style = MaterialTheme.typography.headlineSmall)
-    }
-}
-
-@Composable
-private fun RemoteTextInput(onText: (String) -> Boolean) {
-    var text by remember { mutableStateOf("") }
-    var hidden by remember { mutableStateOf(false) }
-    var queued by remember { mutableStateOf(false) }
-    val focus = LocalFocusManager.current
-    Column {
-        Text("Escribir en el TV", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.size(8.dp))
-        OutlinedTextField(
-            value = text,
-            onValueChange = {
-                if (it.length <= 512) {
-                    text = it
-                    queued = false
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Texto para enviar") },
-            singleLine = true,
-            visualTransformation = if (hidden) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = if (hidden) KeyboardType.Password else KeyboardType.Text,
-                autoCorrectEnabled = false),
-            supportingText = {
-                Text(if (queued) "Comprueba si apareció en el TV." else "Abre primero el campo de texto en el TV.")
-            }
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = text.isNotEmpty(), onClick = {
-                if (onText(text)) {
-                    text = ""
-                    queued = true
-                    focus.clearFocus()
-                }
-            }) { Text("Enviar") }
-            TextButton(onClick = { hidden = !hidden }) { Text(if (hidden) "Mostrar texto" else "Ocultar texto") }
-        }
     }
 }
 

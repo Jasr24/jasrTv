@@ -16,7 +16,9 @@ import org.json.JSONObject
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.Proxy
+import java.net.Socket
 import java.net.SocketTimeoutException
 import java.util.concurrent.TimeUnit
 
@@ -37,6 +39,21 @@ class SamsungDiscovery(context: Context) {
         }.filterNotNull().distinctBy(TvDevice::id).sortedBy(TvDevice::name)
     }
 
+    suspend fun reachableAddresses(devices: List<TvDevice>): Set<String> = withContext(Dispatchers.IO) {
+        coroutineScope {
+            devices.map { it.address }.distinct().map { address ->
+                async {
+                    val responds = runCatching {
+                        Socket(Proxy.NO_PROXY).use { socket ->
+                            socket.connect(InetSocketAddress(address, 8002), 1_500)
+                        }
+                    }.isSuccess
+                    address.takeIf { responds }
+                }
+            }.awaitAll().filterNotNull().toSet()
+        }
+    }
+
     private suspend fun findCandidates(): Map<String, Boolean> {
         val candidates = linkedMapOf<String, Boolean>()
         val lock = wifi?.createMulticastLock("jasrTv-discovery")
@@ -51,16 +68,22 @@ class SamsungDiscovery(context: Context) {
                     "urn:schemas-upnp-org:device:MediaRenderer:1",
                     "urn:schemas-upnp-org:service:RenderingControl:1"
                 )
-                for (service in services) {
+                val requests = services.map { service ->
                     val request = ("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n" +
                         "MAN: \"ssdp:discover\"\r\nMX: 2\r\nST: $service\r\n\r\n")
                         .toByteArray(Charsets.US_ASCII)
-                    socket.send(DatagramPacket(request, request.size, group, 1900))
+                    DatagramPacket(request, request.size, group, 1900)
                 }
-                val deadline = SystemClock.elapsedRealtime() + 2_800
+                val start = SystemClock.elapsedRealtime()
+                val deadline = start + 3_800
+                var nextProbe = start
                 val buffer = ByteArray(4096)
                 while (SystemClock.elapsedRealtime() < deadline && candidates.size < 32) {
                     currentCoroutineContext().ensureActive()
+                    if (SystemClock.elapsedRealtime() >= nextProbe) {
+                        requests.forEach(socket::send)
+                        nextProbe = if (nextProbe == start) start + 1_250 else Long.MAX_VALUE
+                    }
                     val packet = DatagramPacket(buffer, buffer.size)
                     try {
                         socket.receive(packet)

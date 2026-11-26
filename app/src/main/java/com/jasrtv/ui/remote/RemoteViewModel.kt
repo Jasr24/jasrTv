@@ -32,7 +32,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         repository.connect(device)
     }
 
-    fun sendKey(key: RemoteKey) { repository.sendKey(key) }
+    fun sendKey(key: RemoteKey): Boolean = repository.sendKey(key)
 
     fun sendText(text: String): Boolean = repository.sendText(text)
 
