@@ -1,15 +1,23 @@
 package com.jasrtv.data.discovery
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.LinkProperties
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.SystemClock
 import com.jasrtv.data.power.WakeOnLan
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -25,6 +33,7 @@ import java.util.concurrent.TimeUnit
 
 class SamsungDiscovery(context: Context) {
     private val wifi = context.getSystemService(WifiManager::class.java)
+    private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private val http = OkHttpClient.Builder()
         .proxy(Proxy.NO_PROXY)
         .followRedirects(false)
@@ -32,20 +41,24 @@ class SamsungDiscovery(context: Context) {
         .build()
 
     suspend fun search(): List<TvDevice> = withContext(Dispatchers.IO) {
-        val candidates = findCandidates()
+        val network = wifiNetwork()
+        val candidates = findCandidates(network)
+        val localHttp = httpFor(network)
         coroutineScope {
             candidates.map { (address, samsungService) ->
-                async { readDevice(address, samsungService) }
+                async { readDevice(address, samsungService, localHttp) }
             }.awaitAll()
         }.filterNotNull().distinctBy(TvDevice::id).sortedBy(TvDevice::name)
     }
 
     suspend fun reachableAddresses(devices: List<TvDevice>): Set<String> = withContext(Dispatchers.IO) {
+        val network = wifiNetwork()
         coroutineScope {
             devices.map { it.address }.distinct().map { address ->
                 async {
                     val responds = runCatching {
                         Socket(Proxy.NO_PROXY).use { socket ->
+                            network?.bindSocket(socket)
                             socket.connect(InetSocketAddress(address, 8002), 1_500)
                         }
                     }.isSuccess
@@ -56,16 +69,57 @@ class SamsungDiscovery(context: Context) {
     }
 
     suspend fun refresh(device: TvDevice): TvDevice = withContext(Dispatchers.IO) {
-        val info = readDevice(device.address, samsungService = false)
+        val info = readDevice(device.address, samsungService = false, httpFor(wifiNetwork()))
         device.copy(mac = info?.mac ?: device.mac)
     }
 
-    private suspend fun findCandidates(): Map<String, Boolean> {
+    fun wifiChanges() = callbackFlow {
+        val manager = connectivity
+        if (manager == null) {
+            close()
+            return@callbackFlow
+        }
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            private val validated = mutableMapOf<Network, Boolean>()
+
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
+                trySend(Unit)
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                val available = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                val previous = validated.put(network, available)
+                if (previous != null && previous != available) trySend(Unit)
+            }
+
+            override fun onLost(network: Network) {
+                validated.remove(network)
+                trySend(Unit)
+            }
+        }
+        val request = NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build()
+        manager.registerNetworkCallback(request, callback)
+        awaitClose { manager.unregisterNetworkCallback(callback) }
+    }.conflate()
+
+    @Suppress("DEPRECATION") // Also find Wi-Fi when Android chooses mobile data as the default.
+    private fun wifiNetwork(): Network? {
+        val manager = connectivity ?: return null
+        fun isWifi(network: Network) = manager.getNetworkCapabilities(network)
+            ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        return manager.activeNetwork?.takeIf(::isWifi) ?: manager.allNetworks.firstOrNull(::isWifi)
+    }
+
+    private fun httpFor(network: Network?): OkHttpClient =
+        if (network == null) http else http.newBuilder().socketFactory(network.socketFactory).build()
+
+    private suspend fun findCandidates(network: Network?): Map<String, Boolean> {
         val candidates = linkedMapOf<String, Boolean>()
         val lock = wifi?.createMulticastLock("jasrTv-discovery")
         lock?.acquire()
         try {
             DatagramSocket().use { socket ->
+                network?.bindSocket(socket)
                 socket.soTimeout = 250
                 val group = InetAddress.getByName("239.255.255.250")
                 val services = listOf(
@@ -113,10 +167,10 @@ class SamsungDiscovery(context: Context) {
         return candidates
     }
 
-    private fun readDevice(address: String, samsungService: Boolean): TvDevice? {
+    private fun readDevice(address: String, samsungService: Boolean, localHttp: OkHttpClient): TvDevice? {
         val info = runCatching {
             val request = Request.Builder().url("http://$address:8001/api/v2/").build()
-            http.newCall(request).execute().use { response ->
+            localHttp.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use null
                 JSONObject(response.peekBody(64 * 1024).string())
             }

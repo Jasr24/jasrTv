@@ -9,8 +9,10 @@ import com.jasrtv.data.discovery.TvDevice
 import com.jasrtv.data.discovery.isLocalIpv4
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 data class DevicesUiState(
@@ -26,9 +28,18 @@ class DevicesViewModel(application: Application) : AndroidViewModel(application)
     private val pairedTvs = PairedTvStore(application)
     private val mutableState = MutableStateFlow(DevicesUiState())
     private var reachabilityCheck: Job? = null
+    private var searchJob: Job? = null
     val state = mutableState.asStateFlow()
 
-    init { search() }
+    init {
+        search()
+        viewModelScope.launch {
+            discovery.wifiChanges().collectLatest {
+                delay(400)
+                startSearch()
+            }
+        }
+    }
 
     fun refreshRemembered() {
         val remembered = pairedTvs.devices()
@@ -43,9 +54,14 @@ class DevicesViewModel(application: Application) : AndroidViewModel(application)
 
     fun search() {
         if (mutableState.value.searching) return
+        startSearch()
+    }
+
+    private fun startSearch() {
+        searchJob?.cancel()
         mutableState.value = mutableState.value.copy(searching = true, searchFailed = false, devices = emptyList())
         refreshRemembered()
-        viewModelScope.launch {
+        searchJob = viewModelScope.launch {
             try {
                 val found = discovery.search()
                 mutableState.value = mutableState.value.copy(devices = found, searching = false)
