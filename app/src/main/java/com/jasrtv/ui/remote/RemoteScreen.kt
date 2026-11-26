@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.jasrtv.data.discovery.TvDevice
 import com.jasrtv.data.remote.ConnectionState
 import com.jasrtv.data.remote.RemoteKey
+import com.jasrtv.data.remote.StreamingApp
 
 @Composable
 fun RemoteScreen(
@@ -47,6 +48,7 @@ fun RemoteScreen(
     connection: ConnectionState,
     onKey: (RemoteKey) -> Boolean,
     onText: (String) -> Boolean,
+    onLaunchApp: (StreamingApp) -> Unit,
     voiceActive: Boolean,
     onVoice: () -> Unit,
     powerMessage: String?,
@@ -88,6 +90,7 @@ fun RemoteScreen(
         powerMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         if (voiceActive) Text("Si se abre Bixby, habla hacia el micrófono del TV.",
             style = MaterialTheme.typography.bodySmall)
+        StreamingAppShortcuts(connected, onLaunchApp)
         if (connected) RemoteTextInput(onText, onDown = { onKey(RemoteKey.DOWN) })
     }
     if (showMac) {

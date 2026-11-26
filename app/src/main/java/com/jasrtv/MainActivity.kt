@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
                             val voiceActive by remote.voiceActive.collectAsStateWithLifecycle()
                             val powerMessage by remote.powerMessage.collectAsStateWithLifecycle()
                             LifecycleEventEffect(Lifecycle.Event.ON_STOP) { remote.stopVoice() }
-                            RemoteScreen(visibleDevice, connection, remote::sendKey, remote::sendText,
+                            RemoteScreen(visibleDevice, connection, remote::sendKey, remote::sendText, remote::launchApp,
                                 voiceActive, remote::toggleVoice,
                                 powerMessage, remote::powerOff, remote::wakeTv)
                         }

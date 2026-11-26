@@ -18,6 +18,9 @@ class TvRemoteRepository(context: Context) {
     private val mutableState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val state = mutableState.asStateFlow()
     private var socket: WebSocket? = null
+    private var installedAppIds: Set<String> = emptySet()
+    private var authorizedAddress: String? = null
+    private var authorizedFingerprint: String? = null
     private var generation = 0
 
     // Public operations and state changes run on the main thread.
@@ -42,7 +45,14 @@ class TvRemoteRepository(context: Context) {
                     if (token != null) putString(tokenKey, token)
                 }.apply()
                 pairedTvs.remember(tv)
+                authorizedAddress = tv.address
+                authorizedFingerprint = fingerprint
                 mutableState.value = ConnectionState.CONNECTED
+                socket?.let(client::requestInstalledApps)
+            }
+
+            override fun onInstalledApps(appIds: Set<String>) = forAttempt(attempt) {
+                installedAppIds = appIds
             }
 
             override fun onDisconnected(state: ConnectionState) = forAttempt(attempt) {
@@ -69,6 +79,18 @@ class TvRemoteRepository(context: Context) {
 
     fun sendText(text: String): Boolean = send { client.sendText(it, text) }
 
+    suspend fun launchApp(app: StreamingApp): Boolean {
+        val current = socket ?: return false
+        val address = authorizedAddress ?: return false
+        val fingerprint = authorizedFingerprint ?: return false
+        if (mutableState.value != ConnectionState.CONNECTED) return false
+        val id = app.appIds.firstOrNull { it in installedAppIds } ?: app.appIds.first()
+        val candidates = (listOf(id) + app.appIds).distinct()
+        val accepted = client.launchAppViaRest(address, fingerprint, candidates)
+        if (socket !== current) return false
+        return accepted || send { client.launchApp(it, id) }
+    }
+
     private fun send(action: (WebSocket) -> Boolean): Boolean {
         val current = socket ?: return false
         if (mutableState.value != ConnectionState.CONNECTED) return false
@@ -82,6 +104,9 @@ class TvRemoteRepository(context: Context) {
         handler.removeCallbacksAndMessages(null)
         socket?.cancel()
         socket = null
+        installedAppIds = emptySet()
+        authorizedAddress = null
+        authorizedFingerprint = null
         mutableState.value = nextState
     }
 

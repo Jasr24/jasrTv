@@ -1,9 +1,14 @@
 package com.jasrtv.data.remote
 
 import android.util.Base64
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -17,20 +22,22 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
 internal class SamsungTvClient {
+    private val localHttp = OkHttpClient.Builder()
+        .proxy(Proxy.NO_PROXY)
+        .followRedirects(false)
+        .callTimeout(1_200, TimeUnit.MILLISECONDS)
+        .build()
+
     interface Listener {
         fun onWaiting()
         fun onConnected(token: String?, fingerprint: String)
+        fun onInstalledApps(appIds: Set<String>)
         fun onDisconnected(state: ConnectionState)
     }
 
     fun connect(address: String, token: String?, fingerprint: String?, listener: Listener): WebSocket {
         val trust = TvCertificateTrust(fingerprint)
-        val tls = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
-        val http = OkHttpClient.Builder()
-            .sslSocketFactory(tls.socketFactory, trust)
-            .hostnameVerifier { host, _ -> host == address }
-            .proxy(Proxy.NO_PROXY)
-            .followRedirects(false)
+        val http = secureClient(address, trust)
             .connectTimeout(5, TimeUnit.SECONDS)
             .pingInterval(15, TimeUnit.SECONDS)
             .build()
@@ -53,6 +60,12 @@ internal class SamsungTvClient {
                     }
                     "ms.channel.unauthorized" -> listener.onDisconnected(ConnectionState.DENIED)
                     "ms.channel.timeOut" -> listener.onDisconnected(ConnectionState.TIMED_OUT)
+                    "ed.installedApp.get" -> {
+                        val apps = message.optJSONObject("data")?.optJSONArray("data") ?: return
+                        listener.onInstalledApps((0 until apps.length()).mapNotNull { index ->
+                            apps.optJSONObject(index)?.optString("appId")?.takeIf(String::isNotBlank)
+                        }.toSet())
+                    }
                 }
             }
 
@@ -77,6 +90,38 @@ internal class SamsungTvClient {
             .put("Cmd", action).put("DataOfCmd", key.code)
             .put("Option", "false").put("TypeOfRemote", "SendRemoteKey"))
 
+    fun requestInstalledApps(socket: WebSocket): Boolean =
+        send(socket, "ms.channel.emit", JSONObject()
+            .put("event", "ed.installedApp.get").put("to", "host"))
+
+    fun launchApp(socket: WebSocket, appId: String): Boolean =
+        send(socket, "ms.channel.emit", JSONObject()
+            .put("event", "ed.apps.launch").put("to", "host")
+            .put("data", JSONObject().put("action_type", "DEEP_LINK")
+                .put("appId", appId).put("metaTag", "")))
+
+    suspend fun launchAppViaRest(address: String, fingerprint: String, ids: List<String>): Boolean =
+        withContext(Dispatchers.IO) {
+            val secureHttp = secureClient(address, TvCertificateTrust(fingerprint))
+                .callTimeout(1_200, TimeUnit.MILLISECONDS)
+                .build()
+            for ((scheme, port, http) in listOf(
+                Triple("https", 8002, secureHttp), Triple("http", 8001, localHttp)
+            )) {
+                for (id in ids) {
+                    currentCoroutineContext().ensureActive()
+                    val url = HttpUrl.Builder().scheme(scheme).host(address).port(port)
+                        .addPathSegments("api/v2/applications").addPathSegment(id).build()
+                    val request = Request.Builder().url(url).post(ByteArray(0).toRequestBody()).build()
+                    val accepted = runCatching {
+                        http.newCall(request).execute().use { it.isSuccessful }
+                    }.getOrDefault(false)
+                    if (accepted) return@withContext true
+                }
+            }
+            false
+        }
+
     fun sendText(socket: WebSocket, text: String): Boolean =
         send(socket, "ms.channel.emit", JSONObject()
             .put("event", "custom.remote.textReceived").put("to", "broadcast")) &&
@@ -89,6 +134,13 @@ internal class SamsungTvClient {
 
     private fun encode(text: String): String =
         Base64.encodeToString(text.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+
+    private fun secureClient(address: String, trust: TvCertificateTrust): OkHttpClient.Builder {
+        val tls = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
+        return localHttp.newBuilder().callTimeout(0, TimeUnit.SECONDS)
+            .sslSocketFactory(tls.socketFactory, trust)
+            .hostnameVerifier { host, _ -> host == address }
+    }
 }
 
 // Many Samsung TVs use a self-signed certificate. Remember it after TV authorization.

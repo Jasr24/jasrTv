@@ -9,6 +9,7 @@ import com.jasrtv.data.discovery.SamsungDiscovery
 import com.jasrtv.data.power.WakeOnLan
 import com.jasrtv.data.remote.ConnectionState
 import com.jasrtv.data.remote.RemoteKey
+import com.jasrtv.data.remote.StreamingApp
 import com.jasrtv.data.remote.TvRemoteRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -30,6 +31,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     private val mutablePowerMessage = MutableStateFlow<String?>(null)
     val powerMessage = mutablePowerMessage.asStateFlow()
     private var wakeJob: Job? = null
+    private var appLaunch: Job? = null
 
     init {
         viewModelScope.launch {
@@ -78,6 +80,11 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
 
     fun sendText(text: String): Boolean = repository.sendText(text)
 
+    fun launchApp(app: StreamingApp) {
+        appLaunch?.cancel()
+        appLaunch = viewModelScope.launch { repository.launchApp(app) }
+    }
+
     fun powerOff() {
         mutablePowerMessage.value = null
         repository.sendKey(RemoteKey.POWER)
@@ -103,6 +110,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun clearWake() {
         wakeJob?.cancel()
+        appLaunch?.cancel()
         mutablePowerMessage.value = null
     }
 
