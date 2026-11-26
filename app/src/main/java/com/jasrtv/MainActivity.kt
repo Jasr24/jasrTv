@@ -24,6 +24,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.jasrtv.ui.devices.DevicesScreen
 import com.jasrtv.ui.devices.DevicesViewModel
 import com.jasrtv.ui.remote.RemoteScreen
+import com.jasrtv.ui.remote.RemoteHeader
 import com.jasrtv.ui.remote.RemoteViewModel
 
 class MainActivity : ComponentActivity() {
@@ -40,20 +41,25 @@ class MainActivity : ComponentActivity() {
                 val remote: RemoteViewModel = viewModel()
                 val selected by remote.selected.collectAsStateWithLifecycle()
                 val visibleDevice = selected
+                val connection by remote.connection.collectAsStateWithLifecycle()
                 BackHandler(enabled = visibleDevice != null, onBack = remote::changeTv)
-                Scaffold(topBar = { TopAppBar(title = { Text("jasrTv") }) }) { padding ->
+                Scaffold(topBar = {
+                    if (visibleDevice == null) {
+                        TopAppBar(title = { Text("jasrTv") })
+                    } else {
+                        RemoteHeader(visibleDevice, connection, remote::reconnect, remote::pairAgain)
+                    }
+                }) { padding ->
                     Box(Modifier.padding(padding)) {
                         if (visibleDevice == null) {
                             LaunchedEffect(devices) { devices.refreshRemembered() }
                             val state by devices.state.collectAsStateWithLifecycle()
                             DevicesScreen(state, devices::search, remote::select, devices::deviceByAddress)
                         } else {
-                            val connection by remote.connection.collectAsStateWithLifecycle()
                             val voiceActive by remote.voiceActive.collectAsStateWithLifecycle()
                             val powerMessage by remote.powerMessage.collectAsStateWithLifecycle()
                             LifecycleEventEffect(Lifecycle.Event.ON_STOP) { remote.stopVoice() }
-                            RemoteScreen(visibleDevice, connection, remote::changeTv, remote::reconnect,
-                                remote::pairAgain, remote::sendKey, remote::sendText,
+                            RemoteScreen(visibleDevice, connection, remote::sendKey, remote::sendText,
                                 voiceActive, remote::toggleVoice,
                                 powerMessage, remote::powerOff, remote::wakeTv)
                         }

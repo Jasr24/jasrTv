@@ -79,9 +79,8 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun sendText(text: String): Boolean = repository.sendText(text)
 
     fun powerOff() {
-        if (repository.sendKey(RemoteKey.POWER)) {
-            mutablePowerMessage.value = "Comando de apagado enviado."
-        }
+        mutablePowerMessage.value = null
+        repository.sendKey(RemoteKey.POWER)
     }
 
     fun wakeTv(macOverride: String? = null): Boolean {
@@ -94,10 +93,9 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
             mutableSelected.value = target
         }
         wakeJob = viewModelScope.launch {
-            mutablePowerMessage.value = if (WakeOnLan.send(mac, target.address)) {
-                "Señal de encendido enviada. Espera a que responda el TV."
-            } else {
-                "No se pudo enviar la señal de encendido. Revisa la conexión Wi‑Fi."
+            mutablePowerMessage.value = null
+            if (!WakeOnLan.send(mac, target.address)) {
+                mutablePowerMessage.value = "No se pudo enviar la señal de encendido. Revisa la conexión Wi‑Fi."
             }
         }
         return true

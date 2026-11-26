@@ -3,7 +3,6 @@ package com.jasrtv.ui.remote
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,7 +18,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -47,9 +45,6 @@ import com.jasrtv.data.remote.RemoteKey
 fun RemoteScreen(
     device: TvDevice,
     connection: ConnectionState,
-    onChangeTv: () -> Unit,
-    onReconnect: () -> Unit,
-    onPairAgain: () -> Unit,
     onKey: (RemoteKey) -> Boolean,
     onText: (String) -> Boolean,
     voiceActive: Boolean,
@@ -62,37 +57,34 @@ fun RemoteScreen(
     val loading = connection in setOf(ConnectionState.CONNECTING, ConnectionState.WAITING_FOR_TV)
     var showMac by remember(device.id) { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column {
-            Text(device.name, style = MaterialTheme.typography.headlineLarge)
-            Text(device.address, style = MaterialTheme.typography.bodyMedium)
+        if (connection == ConnectionState.WAITING_FOR_TV) {
+            Text("Si aparece un aviso, permite el control en el TV.", style = MaterialTheme.typography.bodySmall)
         }
-        Text(connection.label(), color = MaterialTheme.colorScheme.primary)
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = onChangeTv) { Text("Cambiar TV") }
-            if (!loading && !connected) {
-                if (connection == ConnectionState.CERTIFICATE_CHANGED) {
-                    TextButton(onClick = onPairAgain) { Text("Volver a emparejar") }
-                } else {
-                    TextButton(onClick = onReconnect) { Text("Reconectar") }
-                }
-            }
+        if (connection == ConnectionState.CERTIFICATE_CHANGED) {
+            Text("Cambió la identidad del TV. Verifica el equipo antes de pulsar el botón rojo.",
+                style = MaterialTheme.typography.bodySmall)
         }
-        Box(Modifier.fillMaxWidth()) {
-            DirectionPad(connected) { onKey(it) }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             PowerButton(
                 enabled = !loading,
                 label = if (connected) "Apagar TV" else "Encender TV",
-                modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp),
+                modifier = Modifier,
                 onClick = {
                     if (connected) onPowerOff() else if (!onWake(null)) showMac = true
                 }
             )
+            BixbyButton(connected, voiceActive, Modifier, onVoice)
         }
-        RemoteFunctionButtons(connected, voiceActive, onVoice) { onKey(it) }
+        DirectionPad(connected) { onKey(it) }
+        RemoteFunctionButtons(connected) { onKey(it) }
         powerMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         if (voiceActive) Text("Si se abre Bixby, habla hacia el micrófono del TV.",
             style = MaterialTheme.typography.bodySmall)
@@ -189,13 +181,3 @@ private fun DirectionButton(symbol: String, label: String, enabled: Boolean, onC
     }
 }
 
-private fun ConnectionState.label(): String = when (this) {
-    ConnectionState.CONNECTING -> "Conectando…"
-    ConnectionState.WAITING_FOR_TV -> "Si aparece un aviso, permite el control en el TV."
-    ConnectionState.CONNECTED -> "Conectado"
-    ConnectionState.DISCONNECTED -> "Desconectado"
-    ConnectionState.DENIED -> "El TV rechazó la conexión. Revisa los permisos del televisor."
-    ConnectionState.TIMED_OUT -> "El TV tardó demasiado en responder."
-    ConnectionState.CERTIFICATE_CHANGED -> "Cambió la identidad del TV. Verifica el equipo antes de emparejarlo de nuevo."
-    ConnectionState.UNREACHABLE -> "No se pudo conectar. Revisa el Wi-Fi y que el TV esté encendido."
-}
