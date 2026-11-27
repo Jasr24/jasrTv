@@ -83,7 +83,7 @@ fun RemoteScreen(
             BixbyButton(connected, voiceActive, Modifier, onVoice)
         }
         DirectionPad(connected) { onKey(it) }
-        RemoteFunctionButtons(connected) { onKey(it) }
+        RemoteFunctionButtons(connected, onKey)
         powerMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         if (voiceActive) Text("Si se abre Bixby, habla hacia el micrófono del TV.",
             style = MaterialTheme.typography.bodySmall)

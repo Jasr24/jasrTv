@@ -1,11 +1,16 @@
 package com.jasrtv.ui.remote
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -13,14 +18,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -31,18 +39,22 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jasrtv.data.remote.RemoteKey
 import com.jasrtv.ui.RemoteControlButton
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 private enum class FunctionIcon { BACK, HOME, MICROPHONE, MUTE, VOLUME, CHANNEL }
 
 @Composable
 internal fun RemoteFunctionButtons(
     enabled: Boolean,
-    onKey: (RemoteKey) -> Unit
+    onKey: (RemoteKey) -> Boolean
 ) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -52,8 +64,10 @@ internal fun RemoteFunctionButtons(
             IconButton(FunctionIcon.MUTE, "Silenciar o reactivar el sonido", enabled) { onKey(RemoteKey.MUTE) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            VerticalControl("Volumen", FunctionIcon.VOLUME, RemoteKey.VOLUME_UP, RemoteKey.VOLUME_DOWN, enabled, onKey)
-            VerticalControl("Canal", FunctionIcon.CHANNEL, RemoteKey.CHANNEL_UP, RemoteKey.CHANNEL_DOWN, enabled, onKey)
+            VerticalControl("Volumen", FunctionIcon.VOLUME, RemoteKey.VOLUME_UP, RemoteKey.VOLUME_DOWN,
+                enabled, repeatInterval = 150, onKey = onKey)
+            VerticalControl("Canal", FunctionIcon.CHANNEL, RemoteKey.CHANNEL_UP, RemoteKey.CHANNEL_DOWN,
+                enabled, repeatInterval = 350, onKey = onKey)
         }
     }
 }
@@ -71,7 +85,8 @@ private fun VerticalControl(
     up: RemoteKey,
     down: RemoteKey,
     enabled: Boolean,
-    onKey: (RemoteKey) -> Unit
+    repeatInterval: Long,
+    onKey: (RemoteKey) -> Boolean
 ) {
     val shape = RoundedCornerShape(28.dp)
     val colors = MaterialTheme.colorScheme
@@ -86,23 +101,47 @@ private fun VerticalControl(
                 ), shape),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            VerticalControlKey("+", "Subir ${label.lowercase()}", enabled, ink) { onKey(up) }
+            VerticalControlKey("+", "Subir ${label.lowercase()}", enabled, ink, repeatInterval) { onKey(up) }
             RemoteIcon(icon, ink)
-            VerticalControlKey("−", "Bajar ${label.lowercase()}", enabled, ink) { onKey(down) }
+            VerticalControlKey("−", "Bajar ${label.lowercase()}", enabled, ink, repeatInterval) { onKey(down) }
         }
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun VerticalControlKey(symbol: String, label: String, enabled: Boolean, color: Color, onClick: () -> Unit) {
-    TextButton(
-        onClick = onClick, enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { contentDescription = label },
-        colors = ButtonDefaults.textButtonColors(contentColor = color, disabledContentColor = color),
-        contentPadding = PaddingValues(0.dp)
+private fun VerticalControlKey(
+    symbol: String, label: String, enabled: Boolean, color: Color, repeatInterval: Long, onClick: () -> Boolean
+) {
+    val interactions = remember { MutableInteractionSource() }
+    val sendKey by rememberUpdatedState(onClick)
+    val holdTimeout = LocalViewConfiguration.current.longPressTimeoutMillis
+    LaunchedEffect(interactions, enabled, holdTimeout, repeatInterval) {
+        if (!enabled) return@LaunchedEffect
+        interactions.interactions.collectLatest { interaction ->
+            if (interaction is PressInteraction.Press) {
+                // The long-click sends the first step. Release or cancellation stops this loop.
+                delay(holdTimeout + repeatInterval)
+                while (sendKey()) delay(repeatInterval)
+            }
+        }
+    }
+    Box(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(CircleShape)
+            .combinedClickable(
+                interactionSource = interactions,
+                indication = LocalIndication.current,
+                enabled = enabled,
+                role = Role.Button,
+                onLongClickLabel = "Repetir acción",
+                onLongClick = { onClick() },
+                onClick = { onClick() }
+            )
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center
     ) {
-        Text(symbol, style = MaterialTheme.typography.headlineSmall)
+        Text(symbol, color = color, style = MaterialTheme.typography.headlineSmall)
     }
 }
 
