@@ -25,6 +25,7 @@ import org.json.JSONObject
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.Socket
@@ -40,15 +41,56 @@ class SamsungDiscovery(context: Context) {
         .callTimeout(2, TimeUnit.SECONDS)
         .build()
 
-    suspend fun search(): List<TvDevice> = withContext(Dispatchers.IO) {
+    suspend fun search(remembered: List<TvDevice>): List<TvDevice> = withContext(Dispatchers.IO) {
         val network = wifiNetwork()
-        val candidates = findCandidates(network)
+        val candidates = try {
+            findCandidates(network)
+        } catch (error: java.io.IOException) {
+            if (network == null) throw error
+            emptyMap()
+        }
         val localHttp = httpFor(network)
-        coroutineScope {
+        val discovered = coroutineScope {
             candidates.map { (address, samsungService) ->
                 async { readDevice(address, samsungService, localHttp) }
             }.awaitAll()
-        }.filterNotNull().distinctBy(TvDevice::id).sortedBy(TvDevice::name)
+        }.filterNotNull()
+        val missing = remembered.map(TvDevice::id).filterNot(::isLocalIpv4).toMutableSet()
+        missing.removeAll(discovered.map(TvDevice::id).toSet())
+        val recovered = if (network == null || missing.isEmpty()) emptyList()
+            else recoverSavedTvs(network, localHttp, missing, candidates.keys)
+        (discovered + recovered).distinctBy(TvDevice::id).sortedBy(TvDevice::name)
+    }
+
+    private suspend fun recoverSavedTvs(
+        network: Network,
+        localHttp: OkHttpClient,
+        missing: MutableSet<String>,
+        checked: Set<String>
+    ): List<TvDevice> = coroutineScope {
+        val link = connectivity?.getLinkProperties(network)?.linkAddresses
+            ?.firstOrNull { it.address is Inet4Address && isLocalIpv4(it.address.hostAddress.orEmpty()) }
+            ?: return@coroutineScope emptyList()
+        // Limit recovery to the phone's own IPv4 subnet, capped at a /24.
+        val prefix = maxOf(24, link.prefixLength)
+        if (prefix > 30) return@coroutineScope emptyList()
+        val bytes = link.address.address.map { it.toInt() and 0xFF }
+        val blockSize = 1 shl (32 - prefix)
+        val first = bytes[3] / blockSize * blockSize
+        val base = bytes.take(3).joinToString(".")
+        val candidates = (first + 1 until first + blockSize - 1).asSequence()
+            .filter { it != bytes[3] }.map { "$base.$it" }.filterNot { it in checked }
+        val probeHttp = localHttp.newBuilder().callTimeout(450, TimeUnit.MILLISECONDS).build()
+        val recovered = mutableListOf<TvDevice>()
+        for (batch in candidates.chunked(24)) {
+            if (missing.isEmpty()) break
+            currentCoroutineContext().ensureActive()
+            val matches = batch.map { address ->
+                async { readDevice(address, samsungService = false, localHttp = probeHttp) }
+            }.awaitAll().filterNotNull()
+            recovered += matches.filter { missing.remove(it.id) }
+        }
+        recovered
     }
 
     suspend fun reachableAddresses(devices: List<TvDevice>): Set<String> = withContext(Dispatchers.IO) {
@@ -102,13 +144,7 @@ class SamsungDiscovery(context: Context) {
         awaitClose { manager.unregisterNetworkCallback(callback) }
     }.conflate()
 
-    @Suppress("DEPRECATION") // Also find Wi-Fi when Android chooses mobile data as the default.
-    private fun wifiNetwork(): Network? {
-        val manager = connectivity ?: return null
-        fun isWifi(network: Network) = manager.getNetworkCapabilities(network)
-            ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-        return manager.activeNetwork?.takeIf(::isWifi) ?: manager.allNetworks.firstOrNull(::isWifi)
-    }
+    private fun wifiNetwork(): Network? = localWifiNetwork(connectivity)
 
     private fun httpFor(network: Network?): OkHttpClient =
         if (network == null) http else http.newBuilder().socketFactory(network.socketFactory).build()
@@ -194,4 +230,12 @@ class SamsungDiscovery(context: Context) {
             mac = mac
         )
     }
+}
+
+@Suppress("DEPRECATION") // Wi-Fi can be available while mobile data is the default.
+internal fun localWifiNetwork(manager: ConnectivityManager?): Network? {
+    if (manager == null) return null
+    fun isWifi(network: Network) = manager.getNetworkCapabilities(network)
+        ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+    return manager.activeNetwork?.takeIf(::isWifi) ?: manager.allNetworks.firstOrNull(::isWifi)
 }

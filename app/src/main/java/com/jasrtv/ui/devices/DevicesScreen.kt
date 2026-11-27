@@ -36,7 +36,10 @@ fun DevicesScreen(
 ) {
     var showAddress by remember { mutableStateOf(false) }
     val newDevices = state.devices.filter { found ->
-        state.remembered.none { it.id == found.id || it.address == found.address }
+        state.remembered.none { saved ->
+            saved.id == found.id ||
+                (saved.address == found.address && (saved.id == saved.address || found.id == found.address))
+        }
     }
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = 24.dp),
@@ -50,12 +53,16 @@ fun DevicesScreen(
             items(state.remembered, key = { "saved:${it.id}" }) { saved ->
                 val found = state.devices.firstOrNull { it.id == saved.id }
                 val target = found ?: saved
+                val addressReassigned = found == null && state.devices.any {
+                    it.address == saved.address && it.id != saved.id && it.id != it.address
+                } && saved.id != saved.address
                 val status = when {
+                    addressReassigned -> "La última IP pertenece a otro equipo"
                     target.address in state.reachable.orEmpty() -> "Disponible en la red"
                     state.searching || state.reachable == null -> "Comprobando conexión…"
-                    else -> "Sin respuesta · puede estar apagado"
+                    else -> "Sin respuesta en la red"
                 }
-                TvCard(target, onSelect, status)
+                TvCard(target, onSelect, status, enabled = !addressReassigned)
             }
         }
         item {
@@ -119,8 +126,8 @@ fun DevicesScreen(
 }
 
 @Composable
-private fun TvCard(device: TvDevice, onSelect: (TvDevice) -> Unit, status: String? = null) {
-    ElevatedCard(onClick = { onSelect(device) }, modifier = Modifier.fillMaxWidth()) {
+private fun TvCard(device: TvDevice, onSelect: (TvDevice) -> Unit, status: String? = null, enabled: Boolean = true) {
+    ElevatedCard(onClick = { onSelect(device) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(device.name, style = MaterialTheme.typography.titleLarge)
             Text(listOf(device.model, device.address).filter(String::isNotBlank).joinToString(" · "))

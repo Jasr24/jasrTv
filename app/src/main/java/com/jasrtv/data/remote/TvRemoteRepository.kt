@@ -13,7 +13,7 @@ import okhttp3.WebSocket
 class TvRemoteRepository(context: Context) {
     private val pairedTvs = PairedTvStore(context)
     private val prefs = context.getSharedPreferences("tv_pairings", Context.MODE_PRIVATE)
-    private val client = SamsungTvClient()
+    private val client = SamsungTvClient(context)
     private val handler = Handler(Looper.getMainLooper())
     private val mutableState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val state = mutableState.asStateFlow()

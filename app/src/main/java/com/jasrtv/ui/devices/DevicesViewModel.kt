@@ -63,7 +63,7 @@ class DevicesViewModel(application: Application) : AndroidViewModel(application)
         refreshRemembered()
         searchJob = viewModelScope.launch {
             try {
-                val found = discovery.search()
+                val found = discovery.search(pairedTvs.devices())
                 mutableState.value = mutableState.value.copy(devices = found, searching = false)
                 refreshRemembered()
             } catch (cancelled: CancellationException) {

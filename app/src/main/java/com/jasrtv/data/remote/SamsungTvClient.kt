@@ -1,6 +1,9 @@
 package com.jasrtv.data.remote
 
+import android.content.Context
+import android.net.ConnectivityManager
 import android.util.Base64
+import com.jasrtv.data.discovery.localWifiNetwork
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -21,7 +24,8 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
-internal class SamsungTvClient {
+internal class SamsungTvClient(context: Context) {
+    private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private val localHttp = OkHttpClient.Builder()
         .proxy(Proxy.NO_PROXY)
         .followRedirects(false)
@@ -38,6 +42,7 @@ internal class SamsungTvClient {
     fun connect(address: String, token: String?, fingerprint: String?, listener: Listener): WebSocket {
         val trust = TvCertificateTrust(fingerprint)
         val http = secureClient(address, trust)
+            .apply { localWifiNetwork(connectivity)?.let { socketFactory(it.socketFactory) } }
             .connectTimeout(5, TimeUnit.SECONDS)
             .pingInterval(15, TimeUnit.SECONDS)
             .build()
