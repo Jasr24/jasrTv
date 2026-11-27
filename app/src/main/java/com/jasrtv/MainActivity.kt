@@ -66,12 +66,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }) { padding ->
                     Box(Modifier.fillMaxSize().padding(padding)) {
+                        RemoteBackdrop()
                         if (visibleDevice == null) {
                             LaunchedEffect(devices) { devices.refreshRemembered() }
                             val state by devices.state.collectAsStateWithLifecycle()
                             DevicesScreen(state, devices::search, remote::select, devices::deviceByAddress)
                         } else {
-                            RemoteBackdrop()
                             val voiceActive by remote.voiceActive.collectAsStateWithLifecycle()
                             val powerMessage by remote.powerMessage.collectAsStateWithLifecycle()
                             LifecycleEventEffect(Lifecycle.Event.ON_STOP) { remote.stopVoice() }
